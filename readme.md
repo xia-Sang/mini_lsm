@@ -7,12 +7,16 @@
 - [x] 单体架构，没有考虑更复杂的场景，不过学习使用足够了
 
 # 后续完善
-- [?] 完善compact部分，level compact和后台并发运行？
-- [?] 完善后台
-- [?] 补充bloom filter
-- [?] 完善命令行
-- [?] 支持C/S模式
-- [?] 实现raft协议
+
+⚡ 完善compact部分，level compact和后台并发运行？
+
+⚡ 补充bloom filter 
+
+⚡ 完善命令行
+
+⚡ 支持C/S模式
+
+⚡ 实现raft协议
 
 # 参考
 1. [xiaoxuxiansheng](https://github.com/xiaoxuxiansheng/golsm/blob/main/tree.go)
