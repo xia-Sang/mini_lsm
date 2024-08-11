@@ -39,7 +39,7 @@ func (t *Lsm) Show() {
 	}
 }
 func TestSST(t *testing.T) {
-	s, err := NewSSTReader("./data/000000000.sst")
+	s, err := NewSSTReader("./data/00_000000.sst")
 	assert.Nil(t, err)
 	nb := NewMemTable()
 	s.Restore(nb)
@@ -50,18 +50,18 @@ func TestMemTable_Set1(t *testing.T) {
 	assert.Nil(t, err)
 	db := NewLsm(opts)
 	m := map[string]string{}
-	for i := range 100 {
+	for i := range 800 {
 		key, value := util.GenerateKeyString(i), util.GenerateValueString(12)
 		err := db.Put(key, value)
 		m[key] = value
 		assert.Nil(t, err)
 	}
 
-	for i := range 109 {
+	for i := range 809 {
 		key, _ := util.GenerateKeyString(i), util.GenerateValueString(12)
 
 		val, err := db.Query(key)
-		if i < 100 {
+		if i < 800 {
 			assert.Nil(t, err)
 			assert.Equal(t, len(val), 12)
 		} else {
@@ -69,21 +69,72 @@ func TestMemTable_Set1(t *testing.T) {
 			assert.Equal(t, err, ErrorNotExist)
 		}
 	}
-	for i := range 90 {
+	for i := 10; i < 790; i++ {
 		key, _ := util.GenerateKeyString(i), util.GenerateValueString(12)
 		err := db.Delete(key)
 		assert.Nil(t, err)
 	}
-	for i := range 109 {
+	for i := range 800 {
 		key, _ := util.GenerateKeyString(i), util.GenerateValueString(12)
 
 		val, err := db.Query(key)
-		if i >= 90 && i < 100 {
+		if i >= 10 && i < 790 {
+			assert.Equal(t, err, ErrorNotExist)
+		} else {
 			assert.Nil(t, err)
 			assert.Equal(t, len(val), 12)
 			assert.Equal(t, val, m[key])
-		} else {
+		}
+		t.Logf("(%s:%s:%v)", key, val, err)
+	}
+}
+func TestMemTable_Set9(t *testing.T) {
+	opts, err := NewOptions("./data")
+	assert.Nil(t, err)
+	db := NewLsm(opts)
+	m := map[string]string{}
+	for i := range 800 {
+		key, value := util.GenerateKeyString(i), util.GenerateValueString(12)
+		err := db.Put(key, value)
+		m[key] = value
+		assert.Nil(t, err)
+	}
+
+	for i := 10; i < 790; i++ {
+		key, _ := util.GenerateKeyString(i), util.GenerateValueString(12)
+		err := db.Delete(key)
+		assert.Nil(t, err)
+	}
+	t.Log(db.nodes)
+	for i := range 800 {
+		key, _ := util.GenerateKeyString(i), util.GenerateValueString(12)
+
+		val, err := db.Query(key)
+		if i >= 10 && i < 790 {
 			assert.Equal(t, err, ErrorNotExist)
+		} else {
+			assert.Nil(t, err)
+			assert.Equal(t, len(val), 12)
+			assert.Equal(t, val, m[key])
+		}
+		// t.Logf("(%s:%s:%v)", key, val, err)
+	}
+}
+func TestMemTable_Get9(t *testing.T) {
+	opts, err := NewOptions("./data")
+	assert.Nil(t, err)
+	db := NewLsm(opts)
+
+	for i := range 800 {
+		key, _ := util.GenerateKeyString(i), util.GenerateValueString(12)
+
+		val, err := db.Query(key)
+		if i >= 10 && i < 790 {
+			assert.Equal(t, err, ErrorNotExist)
+		} else {
+			assert.Nil(t, err)
+			assert.Equal(t, len(val), 12)
+			// assert.Equal(t, val, m[key])
 		}
 		t.Logf("(%s:%s:%v)", key, val, err)
 	}

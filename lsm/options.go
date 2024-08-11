@@ -2,8 +2,9 @@ package lsm
 
 import (
 	"errors"
-	"github.com/xia-Sang/lsm_go/util"
 	"path"
+
+	"github.com/xia-Sang/lsm_go/util"
 )
 
 var ErrorNotExist = errors.New("key not exist")
@@ -43,7 +44,7 @@ func WithTableNum(num int) Option {
 }
 func (o *Options) defaultOptions() {
 	if o.maxLevelNum <= 0 {
-		o.maxLevelNum = 10
+		o.maxLevelNum = 7
 	}
 	if o.tableNum <= 0 {
 		o.tableNum = 10

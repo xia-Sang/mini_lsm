@@ -1,6 +1,7 @@
 package lsm
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -11,6 +12,20 @@ func (t *Lsm) getMergeBlock(level int) ([]*Node, []string) {
 		fileNames = append(fileNames, node.fileName)
 	}
 	return t.nodes[level], fileNames
+
+	// 实现随机选取连续节点
+	// var fileNames []string
+	// var mergeNodes []*Node
+	// if len(t.nodes[level]) > 0 {
+	// 	mid := len(t.nodes[level]) / 2
+	// 	start := mid - rand.Intn(mid)
+	// 	end := mid + rand.Intn(len(t.nodes[level])-mid-1)
+	// 	mergeNodes = t.nodes[level][start:end]
+	// 	for _, node := range mergeNodes {
+	// 		fileNames = append(fileNames, node.fileName)
+	// 	}
+	// }
+	// return mergeNodes, fileNames
 }
 
 // 查看这层是否进行合并操作
@@ -39,13 +54,16 @@ func (t *Lsm) compactLevel(level int) error {
 func (t *Lsm) getAllData(level int) error {
 	mem := NewMemTable()
 	mergeNode, fileNames := t.getMergeBlock(level)
+	fmt.Println("mergeNode, fileNames", mergeNode, fileNames)
 	for _, node := range mergeNode {
 		m, err := node.Merge()
 		if err != nil {
 			return err
 		}
 		mem.Merge(m)
-		node.sstReader.Close()
+		if err := node.sstReader.Close(); err != nil {
+			return err
+		}
 	}
 
 	if err := t.sync(mem, level+1, t.sstSeq[level+1].Load()); err != nil {
@@ -53,10 +71,11 @@ func (t *Lsm) getAllData(level int) error {
 	}
 	t.sstSeq[level+1].Add(1)
 	// 清理旧的节点和文件
-	for _, name := range fileNames {
-		_ = os.Remove(name)
+
+	for _, filename := range fileNames {
+		_ = os.Remove(filename)
 	}
-	t.nodes[level] = []*Node{}
+	t.nodes[level] = nil
 	return nil
 }
 

@@ -33,6 +33,10 @@ func NewNode(fileName string, sstReader *SSTReader, opts *Options, spareIndex []
 	}
 	var err error
 	n.spareIndex, err = n.sstReader.ReadBlock()
+	if len(n.spareIndex) == 0 {
+		fmt.Println(n.spareIndex, n.fileName)
+		return nil, ErrorNotExist
+	}
 	n.startKey = n.spareIndex[0].MinKey
 	n.endKey = n.spareIndex[len(n.spareIndex)-1].MaxKey
 	return n, err

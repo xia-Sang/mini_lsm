@@ -11,6 +11,13 @@ type WalWriter struct {
 	dest     *os.File
 }
 
+func (w *WalWriter) WriteAndSync(record *Record) error {
+	if _, err := w.Write(record); err != nil {
+		return err
+	}
+	return w.dest.Sync()
+}
+
 func NewWalWriter(fileName string) (*WalWriter, error) {
 	fp, err := os.OpenFile(fileName, os.O_CREATE|os.O_WRONLY, os.ModePerm)
 	if err != nil {
@@ -18,6 +25,7 @@ func NewWalWriter(fileName string) (*WalWriter, error) {
 	}
 	return &WalWriter{fileName: fileName, dest: fp}, nil
 }
+
 func (w *WalWriter) Write(record *Record) (int, error) {
 	n, body := record.Bytes()
 	err := binary.Write(w.dest, binary.LittleEndian, uint32(n))
@@ -33,7 +41,6 @@ func (w *WalWriter) Close() {
 	_ = w.dest.Close()
 }
 
-// WalReader WalReader结构体
 type WalReader struct {
 	fileName string
 	src      *os.File
@@ -52,10 +59,6 @@ func NewWalReader(fileName string) (*WalReader, error) {
 		fileName: fileName,
 		src:      fp,
 	}, nil
-}
-
-func (w *WalReader) Restore() {
-
 }
 
 // RestoreToMemTable 可以将数据恢复到memtable之中

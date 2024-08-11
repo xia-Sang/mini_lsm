@@ -5,9 +5,10 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"github.com/pierrec/lz4"
 	"io"
 	"os"
+
+	"github.com/pierrec/lz4"
 )
 
 type SSTWriter struct {
@@ -157,8 +158,8 @@ type SSTReader struct {
 	fileName string
 }
 
-func (r *SSTReader) Close() {
-	_ = r.dest.Close()
+func (r *SSTReader) Close() error {
+	return r.dest.Close()
 }
 func NewSSTReader(fileName string) (*SSTReader, error) {
 	fp, err := os.OpenFile(fileName, os.O_RDONLY, os.ModePerm)

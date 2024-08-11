@@ -32,7 +32,6 @@ type Lsm struct {
 	memCompactChan chan *ReadOnlyMemTable //管道传递 todo：并发使用
 	nodes          [][]*Node              //节点配置
 	sstSeq         []atomic.Int32         //sst seq序号
-	// sstSeq []int32 //sst seq序号
 }
 
 func NewLsm(options *Options) *Lsm {
@@ -79,10 +78,13 @@ func (t *Lsm) Delete(key string) error {
 func (t *Lsm) setRecord(record *Record) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	if _, err := t.walWriter.Write(record); err != nil {
 
+	// Write to WAL and ensure it's synced to disk
+	if err := t.walWriter.WriteAndSync(record); err != nil {
 		return err
 	}
+
+	// Add to memTable
 	t.memTable.Set(record)
 
 	if !t.checkOverflow() {
@@ -134,27 +136,28 @@ func (t *Lsm) Query(key string) (string, error) {
 
 // 不是并发来实现的来实现的 目前先使用这个
 // 并发会存在资源竞争 后续来完善即可
+// func (t *Lsm) refreshMemTableLocked() {
+// 	t.syncMemTable(t.memTable)
+// 	t.walWriter.Close()
+// 	_ = os.Remove(t.walFile())
+// 	t.memTableIndex++
+// 	t.newMemTable()
+// }
+
 func (t *Lsm) refreshMemTableLocked() {
-	t.syncMemTable(t.memTable)
-	t.walWriter.Close()
-	_ = os.Remove(t.walFile())
+	oldItem := &ReadOnlyMemTable{
+		walFile:  t.walFile(),
+		memTable: t.memTable,
+	}
+	t.rOnlyMemTable = append(t.rOnlyMemTable, oldItem)
+
+	go func() {
+		t.memCompactChan <- oldItem
+	}()
 	t.memTableIndex++
 	t.newMemTable()
 }
 
-//	func (t *Lsm) refreshMemTableLocked() {
-//		oldItem := &ReadOnlyMemTable{
-//			walFile:  t.walFile(),
-//			memTable: t.memTable,
-//		}
-//		t.rOnlyMemTable = append(t.rOnlyMemTable, oldItem)
-//
-//		go func() {
-//			t.memCompactChan <- oldItem
-//		}()
-//		t.memTableIndex++
-//		t.newMemTable()
-//	}
 func (t *Lsm) newMemTable() {
 	t.walWriter, _ = NewWalWriter(t.walFile())
 	t.memTable = NewMemTable()
@@ -171,6 +174,7 @@ func (t *Lsm) compact() {
 	for {
 		select {
 		case item := <-t.memCompactChan:
+			fmt.Println("compact?")
 			t.compactMemTable(item)
 		}
 	}
@@ -238,7 +242,6 @@ func (t *Lsm) LoadWal() error {
 			t.memTableIndex = getWalFileIndex(f)
 			t.walWriter, _ = NewWalWriter(path.Join(dirPath, f))
 		} else {
-			// 并发使用 todo：没有实现
 			compactItem := &ReadOnlyMemTable{
 				walFile:  f,
 				memTable: memtable,
