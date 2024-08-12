@@ -29,15 +29,11 @@ func TestMemTable_Set(t *testing.T) {
 			assert.NotNil(t, err)
 			assert.Equal(t, err, ErrorNotExist)
 		}
-		t.Logf("(%s:%s)", key, val)
+		// t.Logf("(%s:%s)", key, val)
 	}
+	db.Close()
 }
-func (t *Lsm) Show() {
-	t.memTable.Show()
-	for i := len(t.rOnlyMemTable) - 1; i > 0; i-- {
-		t.rOnlyMemTable[i].memTable.Show()
-	}
-}
+
 func TestSST(t *testing.T) {
 	s, err := NewSSTReader("./data/00_000000.sst")
 	assert.Nil(t, err)

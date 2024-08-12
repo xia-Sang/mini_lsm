@@ -51,10 +51,7 @@ func (w *SSTWriter) syncMemTable(mem *MemTable) error {
 	return nil
 }
 func (w *SSTWriter) SyncMemTable(mem *MemTable) ([]*SparseIndex, error) {
-	// 实现一个最简单的数据落盘，直接将所有数据落盘即可
-
 	var sparseIndex []*SparseIndex
-
 	records := mem.GetRecords()
 	divRecs := divRecords(records, w.opts.tableNum)
 
@@ -124,8 +121,6 @@ func (w *SSTWriter) SyncMemTable(mem *MemTable) ([]*SparseIndex, error) {
 
 	if _, err := w.dest.Write(metaInfo.Bytes()); err != nil {
 		return nil, fmt.Errorf("failed to write meta info: %w", err)
-	} else {
-		//fmt.Printf("metainfo length=%d, %+v\n", n, metaInfo)
 	}
 
 	if err := w.dest.Sync(); err != nil {
@@ -154,8 +149,8 @@ func divRecords(records []*Record, nums int) [][]*Record {
 type SSTReader struct {
 	dest     *os.File      // sstable 对应的磁盘文件
 	lz4Buf   *bytes.Buffer // 缓冲区
-	dataBuf  *bytes.Buffer
-	fileName string
+	dataBuf  *bytes.Buffer // 缓冲区
+	fileName string        // sstable 对应的文件名
 }
 
 func (r *SSTReader) Close() error {
@@ -198,9 +193,7 @@ func (r *SSTReader) ReadBlock() ([]*SparseIndex, error) {
 
 	metaInfo := new(SSTableMetaInfo)
 	metaInfo.Restore(data)
-	//fmt.Printf("metainfo length=%d, %+v\n", nn, metaInfo)
 
-	// restore sparse index
 	r.dest.Seek(int64(metaInfo.IndexOffset), io.SeekStart)
 	var n uint32
 	var offset uint64

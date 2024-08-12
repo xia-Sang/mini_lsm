@@ -1,7 +1,6 @@
 package lsm
 
 import (
-	"fmt"
 	"os"
 )
 
@@ -33,41 +32,38 @@ func (t *Lsm) checkLevelOverflow(level int) bool {
 	if level == t.opts.maxLevel {
 		return false
 	}
+	// fmt.Println("checkLevelOverflow", level, len(t.nodes[level]), t.opts.maxLevelNum)
 	return len(t.nodes[level]) >= t.opts.maxLevelNum
 }
 
-// 需要进行层次合并
-func (t *Lsm) compactLevel(level int) error {
+// 尝试进行层次合并
+func (t *Lsm) tryCompactLevel(level int) {
 	if !t.checkLevelOverflow(level) {
-		return nil
+		return
 	}
-	if err := t.getAllData(level); err != nil {
-		return err
-	}
-	if err := t.compactLevel(level + 1); err != nil {
-		return err
-	}
-	return nil
+	go func() {
+		t.levelCompactChan <- level
+	}()
 }
 
-// 获取所有数据并合并到下一个层次
-func (t *Lsm) getAllData(level int) error {
+func (t *Lsm) compactNodesLevel(level int) {
 	mem := NewMemTable()
 	mergeNode, fileNames := t.getMergeBlock(level)
-	fmt.Println("mergeNode, fileNames", mergeNode, fileNames)
 	for _, node := range mergeNode {
 		m, err := node.Merge()
 		if err != nil {
-			return err
+			panic(err)
 		}
 		mem.Merge(m)
 		if err := node.sstReader.Close(); err != nil {
-			return err
+			// return err
+			panic(err)
 		}
 	}
 
 	if err := t.sync(mem, level+1, t.sstSeq[level+1].Load()); err != nil {
-		return err
+		// return err
+		panic(err)
 	}
 	t.sstSeq[level+1].Add(1)
 	// 清理旧的节点和文件
@@ -76,7 +72,9 @@ func (t *Lsm) getAllData(level int) error {
 		_ = os.Remove(filename)
 	}
 	t.nodes[level] = nil
-	return nil
+
+	t.tryCompactLevel(level + 1)
+	// return nil
 }
 
 // 将 MemTable 同步到磁盘
@@ -108,10 +106,6 @@ func (t *Lsm) sync(mem *MemTable, level int, seq int32) error {
 	}
 	t.nodes[level] = append(t.nodes[level], node)
 
-	// 检查并进行下一个层次的合并操作
-	if err := t.compactLevel(level); err != nil {
-		return err
-	}
-
+	t.tryCompactLevel(level)
 	return nil
 }

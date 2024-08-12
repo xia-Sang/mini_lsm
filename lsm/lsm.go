@@ -23,15 +23,17 @@ type ReadOnlyMemTable struct {
 	memTable *MemTable
 }
 type Lsm struct {
-	opts           *Options
-	lock           sync.RWMutex           //锁
-	memTable       *MemTable              //memtable信息
-	rOnlyMemTable  []*ReadOnlyMemTable    //只读的memtable
-	walWriter      *WalWriter             //wal写入
-	memTableIndex  int                    //index
-	memCompactChan chan *ReadOnlyMemTable //管道传递 todo：并发使用
-	nodes          [][]*Node              //节点配置
-	sstSeq         []atomic.Int32         //sst seq序号
+	opts             *Options
+	lock             sync.RWMutex           //锁
+	memTable         *MemTable              //memtable信息
+	rOnlyMemTable    []*ReadOnlyMemTable    //只读的memtable
+	walWriter        *WalWriter             //wal写入
+	memTableIndex    int                    //index
+	memCompactChan   chan *ReadOnlyMemTable //管道传递 todo：并发使用
+	nodes            [][]*Node              //节点配置
+	sstSeq           []atomic.Int32         //sst seq序号
+	levelCompactChan chan int               //level 压缩
+	stopChan         chan struct{}          //停止信号
 }
 
 func NewLsm(options *Options) *Lsm {
@@ -43,12 +45,14 @@ func NewLsm(options *Options) *Lsm {
 }
 func DefaultLsmTree(opts *Options) (*Lsm, error) {
 	lsm := &Lsm{
-		opts:           opts,
-		rOnlyMemTable:  make([]*ReadOnlyMemTable, 0),
-		memTableIndex:  0,
-		memCompactChan: make(chan *ReadOnlyMemTable),
-		nodes:          make([][]*Node, opts.maxLevel),
-		sstSeq:         make([]atomic.Int32, opts.maxLevel),
+		opts:             opts,
+		rOnlyMemTable:    make([]*ReadOnlyMemTable, 0),
+		memTableIndex:    0,
+		memCompactChan:   make(chan *ReadOnlyMemTable),
+		nodes:            make([][]*Node, opts.maxLevel),
+		sstSeq:           make([]atomic.Int32, opts.maxLevel),
+		levelCompactChan: make(chan int),
+		stopChan:         make(chan struct{}),
 	}
 	go lsm.compact()
 
@@ -79,12 +83,10 @@ func (t *Lsm) setRecord(record *Record) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	// Write to WAL and ensure it's synced to disk
 	if err := t.walWriter.WriteAndSync(record); err != nil {
 		return err
 	}
 
-	// Add to memTable
 	t.memTable.Set(record)
 
 	if !t.checkOverflow() {
@@ -133,17 +135,32 @@ func (t *Lsm) Query(key string) (string, error) {
 
 	return "", ErrorNotExist
 }
+func (t *Lsm) Show() {
+	t.lock.RLock()
+	defer t.lock.RUnlock()
+	t.memTable.Show()
 
-// 不是并发来实现的来实现的 目前先使用这个
-// 并发会存在资源竞争 后续来完善即可
-// func (t *Lsm) refreshMemTableLocked() {
-// 	t.syncMemTable(t.memTable)
-// 	t.walWriter.Close()
-// 	_ = os.Remove(t.walFile())
-// 	t.memTableIndex++
-// 	t.newMemTable()
-// }
+	for i := len(t.rOnlyMemTable) - 1; i >= 0; i-- {
+		t.rOnlyMemTable[i].memTable.Show()
+	}
 
+	for _, nodes := range t.nodes {
+		for j := len(nodes) - 1; j >= 0; j-- {
+			node := nodes[j]
+			node.Show()
+		}
+	}
+
+}
+func (t *Lsm) Close() {
+	close(t.stopChan)
+	t.walWriter.Close()
+	for _, node := range t.nodes {
+		for _, n := range node {
+			n.Close()
+		}
+	}
+}
 func (t *Lsm) refreshMemTableLocked() {
 	oldItem := &ReadOnlyMemTable{
 		walFile:  t.walFile(),
@@ -169,13 +186,16 @@ func (t *Lsm) sstFile(level int, seq int32) string {
 	return path.Join(t.opts.dirPath, fmt.Sprintf("%02d_%06d%s", level, seq, SSTSuffix))
 }
 
-// 后台开启 进行操作 todo
+// 后台开启 进行操作
 func (t *Lsm) compact() {
 	for {
 		select {
+		case <-t.stopChan:
+			return
 		case item := <-t.memCompactChan:
-			fmt.Println("compact?")
 			t.compactMemTable(item)
+		case level := <-t.levelCompactChan:
+			t.compactNodesLevel(level)
 		}
 	}
 }
@@ -200,6 +220,8 @@ func (t *Lsm) syncMemTable(mem *MemTable) error {
 		return err
 	}
 	t.sstSeq[0].Add(1)
+
+	// t.tryCompactLevel(0)
 	return nil
 }
 

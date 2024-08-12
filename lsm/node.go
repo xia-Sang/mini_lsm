@@ -11,16 +11,23 @@ type Node struct {
 	startKey   string
 	endKey     string
 	sstReader  *SSTReader
-	level      int
-	seq        int32
 	spareIndex []*SparseIndex
 	_cache     map[int]*MemTable
 }
 
+func (n *Node) Close() {
+	n.sstReader.Close()
+	n.spareIndex = nil
+	n._cache = nil
+}
 func (n *Node) Show() {
-	for k, v := range n._cache {
-		fmt.Println(k)
-		v.Show()
+	for i := len(n.spareIndex) - 1; i >= 0; i-- {
+		mem, err := n.sstReader.readSSTBlock(n.spareIndex[i].DataOffset)
+		if err != nil {
+			panic(err)
+		}
+		mem.Show()
+
 	}
 }
 func NewNode(fileName string, sstReader *SSTReader, opts *Options, spareIndex []*SparseIndex) (*Node, error) {
@@ -100,7 +107,6 @@ func (n *Node) Merge() (*MemTable, error) {
 		if err != nil {
 			return nil, err
 		}
-		//mem.Show()
 		m.Merge(mem)
 	}
 	return m, nil
