@@ -32,7 +32,6 @@ type Lsm struct {
 	memCompactChan chan *ReadOnlyMemTable //管道传递 todo：并发使用
 	nodes          [][]*Node              //节点配置
 	sstSeq         []atomic.Int32         //sst seq序号
-	// sstSeq []int32 //sst seq序号
 }
 
 func NewLsm(options *Options) *Lsm {
